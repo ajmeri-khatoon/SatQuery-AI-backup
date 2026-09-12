@@ -10,7 +10,6 @@ from .auth import get_current_user
 from .config import PROJECT_ROOT
 from .database import get_db
 
-
 router = APIRouter(tags=["images"])
 UPLOAD_DIRECTORY = PROJECT_ROOT / "uploads"
 ALLOWED_EXTENSIONS = {".tif", ".tiff", ".png", ".jpg", ".jpeg"}
@@ -47,7 +46,7 @@ async def upload_image(
 		db.add(image)
 		db.commit()
 		db.refresh(image)
-		return image
+		return ImageResponse(id=image.id, filename=image.filename, created_at=image.created_at)
 	except Exception:
 		if stored_path.exists():
 			stored_path.unlink()

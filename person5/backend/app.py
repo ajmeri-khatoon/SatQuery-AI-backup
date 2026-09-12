@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import Field
 
 from person1.agent import PlanningError, TaskPlanner
-from person3.inference import UnavailableVisionProvider
+from person3.inference import UnavailableVisionProvider, VisionRequest, VisionTask
 from person4.change_detection import UnavailableChangeProvider
 from person4.optical_sar import UnavailableOpticalSarProvider
 from shared.contracts import (
@@ -100,11 +100,23 @@ def _unavailable_result(
     analysis_id: UUID, step_id: str, specialist: Specialist
 ) -> SpecialistResult:
     if specialist is Specialist.VISION:
-        return UnavailableVisionProvider().run(analysis_id, step_id)
+        return UnavailableVisionProvider().run(
+            VisionRequest(
+                image_reference="unavailable.tif", task=VisionTask.VQA,
+                prompt="No provider configured.", analysis_id=analysis_id, step_id=step_id,
+            )
+        ).to_specialist_result()  # type: ignore[return-value]
     if specialist is Specialist.CHANGE_DETECTION:
         return UnavailableChangeProvider().run(analysis_id, step_id)
-    if specialist in {Specialist.OPTICAL_SAR, Specialist.FUSION}:
-        return UnavailableOpticalSarProvider().run(analysis_id, step_id, specialist)
+    if specialist is Specialist.OPTICAL_SAR:
+        return UnavailableOpticalSarProvider().run(analysis_id, step_id)
+    if specialist is Specialist.FUSION:
+        return SpecialistResult(
+            analysis_id=analysis_id, step_id=step_id, specialist=specialist,
+            status=SpecialistStatus.UNAVAILABLE,
+            limitations=["Optical/SAR fusion provider is not configured."],
+            provenance={"provider": "unconfigured"}, error_code="provider_unavailable",
+        )
     return SpecialistResult(
         analysis_id=analysis_id,
         step_id=step_id,

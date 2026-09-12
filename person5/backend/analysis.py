@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..integration.adapters import ANALYSIS_ADAPTERS
 from ..models import Analysis, Execution, Image, Result, User
 from ..schemas.analysis import (
 	AnalysisCreateResponse,
@@ -11,10 +10,10 @@ from ..schemas.analysis import (
 	ExecutionResponse,
 	QueryRequest,
 )
-from ..services.analysis_execution import execute_analysis
+from ..services.analysis_execution import create_contract_analysis, execute_analysis
 from .auth import get_current_user
+from .config import PROJECT_ROOT
 from .database import get_db
-
 
 router = APIRouter(tags=["analysis"])
 
@@ -26,19 +25,31 @@ def _get_user_image(image_id: int, user_id: int, db: Session) -> Image:
 	return image
 
 
+def _resolve_images(image_id: int | None, image_ids: list[int] | None, user_id: int, db: Session) -> list[Image]:
+	ids = image_ids or ([] if image_id is None else [image_id])
+	if not ids or len(set(ids)) != len(ids):
+		raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="one or more image_ids are required and must be unique")
+	images = list(db.scalars(select(Image).where(Image.user_id == user_id, Image.id.in_(ids))).all())
+	by_id = {image.id: image for image in images}
+	if len(images) != len(ids):
+		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found")
+	return [by_id[image_id] for image_id in ids]
+
+
 def _create_analysis(
-	*, image: Image, user: User, question: str | None, db: Session
+	*, images: list[Image], user: User, question: str, requested_capability: str, db: Session
 ) -> AnalysisCreateResponse:
-	analysis = Analysis(user_id=user.id, image_id=image.id, question=question, status="pending")
+	analysis = Analysis(user_id=user.id, image_id=images[0].id, question=question, status="pending")
 	db.add(analysis)
 	db.flush()
-
-	for _adapter in ANALYSIS_ADAPTERS:
-		db.add(Execution(analysis_id=analysis.id, status="pending"))
-
+	try:
+		create_contract_analysis(analysis, images, question, requested_capability, db, PROJECT_ROOT)
+	except ValueError as error:
+		db.rollback()
+		raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
 	db.commit()
 	db.refresh(analysis)
-	return AnalysisCreateResponse(analysis_id=analysis.id, status=analysis.status)
+	return AnalysisCreateResponse(analysis_id=analysis.id, status=analysis.status, plan=analysis.plan_data)
 
 
 @router.post("/query", response_model=AnalysisCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -47,8 +58,8 @@ def create_query(
 	current_user: User = Depends(get_current_user),
 	db: Session = Depends(get_db),
 ) -> AnalysisCreateResponse:
-	image = _get_user_image(request.image_id, current_user.id, db)
-	return _create_analysis(image=image, user=current_user, question=request.question, db=db)
+	images = _resolve_images(request.image_id, request.image_ids, current_user.id, db)
+	return _create_analysis(images=images, user=current_user, question=request.question, requested_capability=request.requested_capability, db=db)
 
 
 @router.post("/analyze", response_model=AnalysisCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -57,8 +68,8 @@ def create_analysis(
 	current_user: User = Depends(get_current_user),
 	db: Session = Depends(get_db),
 ) -> AnalysisCreateResponse:
-	image = _get_user_image(request.image_id, current_user.id, db)
-	return _create_analysis(image=image, user=current_user, question=request.question, db=db)
+	images = _resolve_images(request.image_id, request.image_ids, current_user.id, db)
+	return _create_analysis(images=images, user=current_user, question=request.question, requested_capability=request.requested_capability, db=db)
 
 
 def _get_user_analysis(analysis_id: int, user_id: int, db: Session) -> Analysis:
@@ -86,6 +97,9 @@ def get_result(
 		question=analysis.question,
 		status=analysis.status,
 		results=results,
+		plan=analysis.plan_data,
+		final_result=analysis.result_data,
+		trace=analysis.trace_data,
 	)
 
 
@@ -101,11 +115,10 @@ def run_analysis(
 			status_code=status.HTTP_409_CONFLICT,
 			detail=f"Analysis is already {analysis.status}",
 		)
-	if analysis.image_id is None:
-		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analysis has no image")
-
-	image = _get_user_image(analysis.image_id, current_user.id, db)
-	analysis = execute_analysis(analysis, image, db)
+	try:
+		analysis = execute_analysis(analysis, db, PROJECT_ROOT)
+	except ValueError as error:
+		raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
 	return AnalysisCreateResponse(analysis_id=analysis.id, status=analysis.status)
 
 
@@ -124,12 +137,14 @@ def get_execution(
 	return [
 		ExecutionResponse(
 			id=execution.id,
-			step=ANALYSIS_ADAPTERS[index].name if index < len(ANALYSIS_ADAPTERS) else "unknown",
+			step=execution.step or "unknown",
+			specialist=execution.specialist,
 			status=execution.status,
 			started_at=execution.started_at,
 			completed_at=execution.completed_at,
 			error_message=execution.error_message,
 			created_at=execution.created_at,
+			result_data=execution.result_data,
 		)
 		for index, execution in enumerate(executions)
 	]

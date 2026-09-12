@@ -37,16 +37,20 @@ Connections between the different team components.
 tests/
 Backend and full-system integration tests.
 
-EXPECTED API:
+## Integrated API
 
-POST /upload
-POST /query
-POST /analyze
-GET /result/{id}
-GET /execution/{id}
-GET /health
+Run `person5.backend.main:app` after setting `DATABASE_URL` and `JWT_SECRET_KEY`.
+The authenticated API is:
 
-Do not implement APIs that are not needed.
+- `POST /auth/register` and `POST /auth/login`
+- `POST /upload`
+- `POST /query` or `POST /analyze` with `image_id` or ordered `image_ids`, `question`, and optional `requested_capability`
+- `POST /analyze/{analysis_id}/run`
+- `GET /result/{analysis_id}`
+- `GET /execution/{analysis_id}`
+- `GET /health`
+
+The execution service converts database images to shared `ImageAsset` contracts, asks Person 1 for a plan, executes providers through `integration/adapters.py`, then persists the exact request, plan, specialist results, final synthesis, and execution trace in the existing SQLAlchemy tables. `SATQUERY_VISION_MODEL` enables the local Person 3 model provider; `SATQUERY_BIT_CHECKPOINT` enables the Person 4 BIT checkpoint. Without those settings, results remain truthful and explicitly unavailable or fallback-labeled.
 
 FINAL OUTPUT:
 One backend through which the frontend can communicate with the entire SatQuery AI system.

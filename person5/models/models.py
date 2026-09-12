@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..backend.database import Base
@@ -47,8 +47,13 @@ class Analysis(Base):
 	id: Mapped[int] = mapped_column(Integer, primary_key=True)
 	user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 	image_id: Mapped[int | None] = mapped_column(ForeignKey("images.id"))
+	image_ids: Mapped[list[int] | None] = mapped_column(JSON)
 	question: Mapped[str | None] = mapped_column(Text)
 	status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+	request_data: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+	plan_data: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+	result_data: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+	trace_data: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 	updated_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -79,10 +84,13 @@ class Execution(Base):
 
 	id: Mapped[int] = mapped_column(Integer, primary_key=True)
 	analysis_id: Mapped[int] = mapped_column(ForeignKey("analyses.id"), nullable=False)
+	step: Mapped[str | None] = mapped_column(String(100))
+	specialist: Mapped[str | None] = mapped_column(String(100))
 	status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
 	started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 	completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 	error_message: Mapped[str | None] = mapped_column(Text)
+	result_data: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 	created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 	analysis: Mapped[Analysis] = relationship(back_populates="executions")

@@ -3,6 +3,6 @@ import { resultMessage } from "../src/resultPresentation";
 
 describe("resultMessage", () => {
   it("does not present unavailable output as a real answer", () => {
-    expect(resultMessage({ specialist: "vision", status: "unavailable", answer: null, confidence: null, limitations: [] })).toContain("not performed");
+    expect(resultMessage({ analysis_id: "analysis", step_id: "vision", specialist: "vision", status: "unavailable", answer: null, confidence: null, evidence_ids: [], provenance: {}, limitations: [] })).toContain("not performed");
   });
 });
