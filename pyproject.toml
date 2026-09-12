@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "satquery-ai"
+version = "0.1.0"
+description = "SATQUERY AI foundation contracts and local API"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "pydantic>=2.7,<3",
+  "python-multipart>=0.0.9,<1",
+  "uvicorn>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27,<1",
+  "mypy>=1.13,<2",
+  "pytest>=8,<9",
+  "ruff>=0.8,<1",
+]
+geo = [
+  "numpy>=1.26,<3",
+  "rasterio>=1.3,<2",
+]
+ml = [
+  "torch>=2.2,<3",
+  "transformers>=4.40,<5",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "person1/tests", "person2/tests", "person3/tests", "person4/tests", "person5/tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["shared", "person1", "person2", "person3", "person4", "person5"]
+check_untyped_defs = true
+warn_unused_configs = true
+
+[tool.setuptools.packages.find]
+include = ["shared*", "person1*", "person2*", "person3*", "person4*", "person5*"]

@@ -1,68 +1,48 @@
-<<<<<<< HEAD
-SATQUERY AI
+# SATQUERY AI
 
-Smart India Hackathon 2026 Project
+SATQUERY AI is a Smart India Hackathon 2026 prototype for SIH26167: **SatQuery AI — An Interactive Vision-Language Assistant for Multimodal Remote Sensing Image Analysis through Text Queries**.
 
-SatQuery is an agentic remote-sensing AI system.
+Users will be able to provide satellite imagery and ask natural-language questions about it. The system is being built to handle single optical or multispectral images, SAR imagery, co-registered optical/SAR pairs, and before/after change analysis.
 
-The user uploads satellite imagery and asks a question in natural language.
+## Product principles
 
-SatQuery:
-1. Understands the question
-2. Determines the required analysis
-3. Selects the appropriate specialist AI/tool
-4. Runs the analysis
-5. Combines the results
-6. Produces an evidence-backed answer
-7. Shows the result visually on a map
+- Remote-sensing outputs must be produced by real, appropriate specialist processing or models; a generic vision-language model alone is not sufficient.
+- Dataset and model adaptation will be grounded in suitable open remote-sensing resources, such as BigEarthNet, VRSBench, RSVQA, CDVQA, or Open-CD, as applicable to each capability.
+- Results must include calibrated confidence where supported, visual or geospatial evidence where available, provenance, limitations, and an auditable execution trace.
+- An unavailable specialist must report that it is unavailable. SATQUERY never presents fabricated AI output as analysis.
 
-TEAM STRUCTURE:
+## Architecture
 
-person1 → AI Agent / Orchestrator
-person2 → Satellite Data / Preprocessing
-person3 → Remote-Sensing Vision AI
-person4 → Change Detection + Optical/SAR
-person5 → Backend + Integration
-person6 → Frontend + GIS
+```text
+Web GIS frontend
+  -> FastAPI backend and analysis manager
+  -> agent orchestrator
+  -> preprocessing / vision / change / optical-SAR specialists
+  -> result fusion, evidence, confidence, and execution trace
+  -> persistent storage
+```
 
-MAIN TECHNOLOGIES:
+The frontend is TypeScript/React with GIS visualization. The backend and specialist modules are Python. Shared, versioned contracts define the boundary between them.
 
-AI:
-Qwen3-VL
-Hugging Face
-PyTorch
-PEFT/LoRA
-LangGraph
+## Team ownership
 
-Satellite:
-Sentinel-1
-Sentinel-2
-Google Earth Engine
-Sentinel Hub
-Rasterio
-GDAL
-GeoPandas
+| Area | Responsibility |
+| --- | --- |
+| `person1/` | Query planning, specialist orchestration, fusion, confidence, trace |
+| `person2/` | Sentinel and GeoTIFF ingestion, metadata, alignment, tiling |
+| `person3/` | Remote-sensing VQA, captioning, grounding, dataset/model adaptation |
+| `person4/` | Change detection and optical/SAR analysis and fusion |
+| `person5/` | FastAPI, uploads, integration, persistence, execution tracking |
+| `person6/` | React UI, MapLibre/GIS evidence visualization |
 
-Backend:
-FastAPI
-PostgreSQL
-PostGIS
-Redis
-Docker
+## Current stage
 
-Frontend:
-React
-TypeScript
-Tailwind
-MapLibre
+This backup repository is establishing a reproducible application foundation. It does not yet include downloaded models, datasets, or completed remote-sensing inference. The initial foundation provides validated contracts, safe unavailable-provider behavior, module boundaries, and tests before those capabilities are added.
 
-IMPORTANT:
-All six components are developed in parallel.
+## Repository safety
 
-Each component must have a clear input/output interface so everything can be integrated later.
+This is a personal backup and AI-development repository. It is intentionally separate from the team repository. No credentials, model weights, or large datasets belong in Git.
 
-Do not commit API keys, passwords, or huge datasets.
-=======
-# SATQUERY-AI
-SATQUERY AI -- A multimodel satelite 
->>>>>>> 62b0700b92087d6b6a811cb9810acd191da2215b
+## Development
+
+Setup commands will be documented once the Python and frontend manifests are in place. Copy `.env.example` to a local `.env` only when a future phase needs runtime configuration; never commit it.

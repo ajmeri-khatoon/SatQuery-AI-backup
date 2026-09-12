@@ -14,6 +14,7 @@ env/
 node_modules/
 dist/
 build/
+*.egg-info/
 
 # IDE
 .vscode/
@@ -44,3 +45,15 @@ Thumbs.db
 tmp/
 temp/
 outputs/
+
+# Ruflo local secrets and runtime data
+.env.local
+.env.*.local
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+
+# Codex local configuration
+.codex/
+# Claude Flow runtime data
+# Environment variables
