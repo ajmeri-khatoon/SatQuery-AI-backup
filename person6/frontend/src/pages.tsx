@@ -1,8 +1,9 @@
-import { AlertTriangle, ArrowRight, CheckCircle2, Database, FileText, GitCompare, Layers3, LockKeyhole, LogOut, Radar, Search, UploadCloud } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Database, FileText, GitCompare, Layers3, LockKeyhole, LogOut, Radar, Search, UploadCloud, User, Monitor, Clock, Settings, Info } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
 import { analysisApi, ApiError, fetchHealth } from "./api";
 import { useAuth } from "./auth";
+import { useTheme } from "./theme";
 import type { AnalysisMode, AnalysisResult, AssetSlot, ExecutionRecord, RequestedCapability, SpecialistResult, TaskPlan, UploadedAsset, UploadedImage } from "./contracts";
 import { FileDropzone } from "./components/FileDropzone";
 import { Badge, Button, EmptyState, Metric, Panel } from "./components/ui";
@@ -66,6 +67,117 @@ function RegionList({ parsed }: { parsed: Record<string, unknown> | null }) { co
 function OpticalOutput({ view, parsed, result }: { view: string; parsed: Record<string, unknown> | null; result: SpecialistResult }) { return <div className="unavailable-visual"><Layers3 size={20} /><strong>{view} layer</strong><span>{view === "fused" ? "P5 fusion output" : `${view.toUpperCase()} raster`} data is not returned as a URL by P5.</span>{parsed && <pre>{JSON.stringify(parsed, null, 2)}</pre>}{result.answer && !parsed && <p>{result.answer}</p>}</div>; }
 function parseAnswer(answer: string | null): Record<string, unknown> | null { if (!answer) return null; try { const value: unknown = JSON.parse(answer); return typeof value === "object" && value !== null ? value as Record<string, unknown> : null; } catch { return null; } }
 
-export function SettingsPage() { return <div className="standard-page"><PageTitle eyebrow="SYSTEM" title="Settings" /><Panel title="Backend connection" eyebrow="ENVIRONMENT"><div className="settings-form"><label className="field-label" htmlFor="api-url">API base URL</label><input id="api-url" value={import.meta.env.VITE_API_BASE_URL || "Same origin (VITE_API_BASE_URL is unset)"} readOnly /><p className="field-hint">Configure `VITE_API_BASE_URL` before starting Vite. The frontend does not embed a backend URL.</p></div></Panel></div>; }
-export function AuthPage({ mode }: { mode: "login" | "register" }) { const navigate = useNavigate(); const { signIn } = useAuth(); const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false); const submit = async (event: React.FormEvent) => { event.preventDefault(); setBusy(true); setError(null); try { await signIn(email, password, mode === "register"); navigate("/"); } catch (authError) { setError(errorMessage(authError)); } finally { setBusy(false); } }; return <main className="auth-page"><div className="auth-brand"><div className="brand-mark"><Radar size={21} /></div><strong>SatQuery</strong></div><div className="auth-card"><p className="eyebrow">SECURE WORKSPACE ACCESS</p><h1>{mode === "login" ? "Sign in" : "Create account"}</h1><p className="auth-copy">Connect to the Person 5 authenticated API.</p>{error && <div className="error-banner"><AlertTriangle size={16} />{error}</div>}<form onSubmit={(event) => void submit(event)}><label className="field-label" htmlFor="email">EMAIL</label><input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="analyst@organisation.org" required /><label className="field-label" htmlFor="password">PASSWORD</label><input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" minLength={8} required /><Button type="submit" loading={busy}><LockKeyhole size={16} /> {mode === "login" ? "Sign in" : "Register"}</Button></form><p className="auth-switch">{mode === "login" ? "Need an account?" : "Already registered?"} <Link to={mode === "login" ? "/register" : "/login"}>{mode === "login" ? "Register" : "Sign in"}</Link></p></div></main>; }
+export function SettingsPage() { 
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <div className="standard-page">
+      <PageTitle eyebrow="SYSTEM" title="Settings" />
+      
+      <div className="dashboard-grid">
+        <Panel title="Profile" eyebrow="USER ACCOUNT" className="settings-panel fade-enter" style={{animationDelay: "0.1s"}}>
+          <div className="settings-form">
+            <div className="file-row" style={{marginBottom: "20px"}}>
+              <div className="row-icon"><User size={20} /></div>
+              <div className="file-details">
+                <strong>Analyst Session</strong>
+                <small>Authenticated via JWT</small>
+              </div>
+              <Badge tone="green">Active</Badge>
+            </div>
+            <Button variant="secondary" onClick={() => { signOut(); navigate("/login"); }}>
+              <LogOut size={16} /> Sign out
+            </Button>
+          </div>
+        </Panel>
+
+        <Panel title="Appearance" eyebrow="INTERFACE" className="settings-panel fade-enter" style={{animationDelay: "0.15s"}}>
+          <div className="settings-form">
+            <label className="field-label" style={{marginTop: 0}}>THEME PREFERENCE</label>
+            <div className="mode-tabs" style={{margin: "0 0 20px", padding: 0, borderBottom: "none", gap: "10px"}}>
+              <button className={theme === "light" ? "selected" : ""} onClick={() => setTheme("light")} style={{border: "1px solid var(--line)", borderRadius: "6px"}}>Light</button>
+              <button className={theme === "dark" ? "selected" : ""} onClick={() => setTheme("dark")} style={{border: "1px solid var(--line)", borderRadius: "6px"}}>Dark</button>
+              <button className={theme === "system" ? "selected" : ""} onClick={() => setTheme("system")} style={{border: "1px solid var(--line)", borderRadius: "6px"}}>System</button>
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="dashboard-grid">
+        <Panel title="Analysis History" eyebrow="WORKSPACE" className="settings-panel fade-enter" style={{animationDelay: "0.2s"}}>
+          <EmptyState icon={<Clock size={22} />} title="View past executions">
+            <span>Access your previous results and execution traces from the history page.</span>
+            <div style={{marginTop: "20px"}}>
+              <Link to="/analysis" className="button button-secondary">Go to History <ArrowRight size={16} /></Link>
+            </div>
+          </EmptyState>
+        </Panel>
+
+        <div style={{display: "flex", flexDirection: "column", gap: "24px"}}>
+          <Panel title="Connection" eyebrow="SYSTEM" className="settings-panel fade-enter" style={{animationDelay: "0.25s"}}>
+            <div className="settings-form">
+              <label className="field-label" style={{marginTop: 0}} htmlFor="api-url">API BASE URL</label>
+              <input id="api-url" value={import.meta.env.VITE_API_BASE_URL || "Same origin (unset)"} readOnly />
+              <p className="field-hint">Backend integration for P1-P5 architecture.</p>
+            </div>
+          </Panel>
+          
+          <Panel title="App Information" eyebrow="ABOUT" className="settings-panel fade-enter" style={{animationDelay: "0.3s"}}>
+            <div className="file-row">
+              <div className="row-icon"><Info size={20} /></div>
+              <div className="file-details">
+                <strong>SatQuery AI</strong>
+                <small>SIH26167 Prototype</small>
+              </div>
+              <Badge tone="blue">v0.1.0</Badge>
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  ); 
+}
+export function AuthPage({ mode }: { mode: "login" | "register" }) { 
+  const navigate = useNavigate(); 
+  const { signIn } = useAuth(); 
+  const [email, setEmail] = useState(""); 
+  const [password, setPassword] = useState(""); 
+  const [error, setError] = useState<string | null>(null); 
+  const [busy, setBusy] = useState(false); 
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  const submit = async (event: React.FormEvent) => { 
+    event.preventDefault(); 
+    setBusy(true); 
+    setError(null); 
+    try { 
+      await signIn(email, password, mode === "register"); 
+      if (mode === "register") {
+        setShowWelcome(true);
+        setTimeout(() => navigate("/"), 2500);
+      } else {
+        navigate("/"); 
+      }
+    } catch (authError) { 
+      setError(errorMessage(authError)); 
+      setBusy(false);
+    } 
+  }; 
+  
+  if (showWelcome) {
+    return (
+      <main className="welcome-screen fade-enter">
+        <h2>Welcome to SatQuery AI</h2>
+        <div className="grid-loader">
+          <div /><div /><div /><div />
+        </div>
+        <p style={{ color: "var(--muted)", font: "11px 'DM Mono', monospace", marginTop: "10px" }}>INITIALIZING WORKSPACE...</p>
+      </main>
+    );
+  }
+
+  return <main className="auth-page fade-enter"><div className="auth-brand"><div className="brand-mark"><Radar size={21} /></div><strong>SatQuery</strong></div><div className="auth-card"><p className="eyebrow">SECURE WORKSPACE ACCESS</p><h1>{mode === "login" ? "Sign in" : "Create account"}</h1><p className="auth-copy">Connect to the Person 5 authenticated API.</p>{error && <div className="error-banner"><AlertTriangle size={16} />{error}</div>}<form onSubmit={(event) => void submit(event)}><label className="field-label" htmlFor="email">EMAIL</label><input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="analyst@organisation.org" required /><label className="field-label" htmlFor="password">PASSWORD</label><input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" minLength={8} required /><Button type="submit" loading={busy}><LockKeyhole size={16} /> {mode === "login" ? "Sign in" : "Register"}</Button></form><p className="auth-switch">{mode === "login" ? "Need an account?" : "Already registered?"} <Link to={mode === "login" ? "/register" : "/login"}>{mode === "login" ? "Register" : "Sign in"}</Link></p></div></main>; 
+}
 function PageTitle({ eyebrow, title, action }: { eyebrow: string; title: string; action?: ReactNode }) { return <div className="page-title"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div>{action}</div>; }
