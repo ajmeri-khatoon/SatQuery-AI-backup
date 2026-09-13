@@ -4,15 +4,15 @@ from .database import verify_connection
 
 
 def main() -> int:
-	try:
-		verify_connection()
-	except SQLAlchemyError as error:
-		print(f"Database connection failed: {error}")
-		return 1
+    try:
+        verify_connection()
+    except SQLAlchemyError as error:
+        print(f"Database connection failed: {error}")
+        return 1
 
-	print("Database connection successful")
-	return 0
+    print("Database connection successful")
+    return 0
 
 
 if __name__ == "__main__":
-	raise SystemExit(main())
+    raise SystemExit(main())

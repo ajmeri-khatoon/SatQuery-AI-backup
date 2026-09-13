@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Iterator, Protocol
 from uuid import UUID
 
 from shared.contracts import Specialist, SpecialistResult, SpecialistStatus
@@ -20,6 +20,11 @@ class VisionTask(StrEnum):
     VQA = "vqa"
     CAPTIONING = "captioning"
     GROUNDING = "grounding"
+
+
+class VisionModelKind(StrEnum):
+    GENERIC_MODEL = "GENERIC_MODEL"
+    REMOTE_SENSING_ADAPTED_MODEL = "REMOTE_SENSING_ADAPTED_MODEL"
 
 
 class VisionStatus(StrEnum):
@@ -39,6 +44,11 @@ class VisionModelConfig:
     device: str = "cpu"
     allow_download: bool = False
     trust_remote_code: bool = False
+    adapter_path: str | Path | None = None
+    adaptation_dataset: str | None = None
+    adaptation_method: str | None = None
+    model_kind: VisionModelKind = VisionModelKind.GENERIC_MODEL
+    raster_bands: tuple[int, ...] = (1, 2, 3)
 
     def __post_init__(self) -> None:
         if not self.model_identifier.strip():
@@ -49,6 +59,19 @@ class VisionModelConfig:
             raise ValueError(
                 "adaptation_name is required when remote_sensing_adapted is true"
             )
+        if self.remote_sensing_adapted and self.adapter_path is None:
+            raise ValueError("adapter_path is required for a remote-sensing adapted model")
+        if (
+            self.remote_sensing_adapted
+            and self.model_kind is not VisionModelKind.REMOTE_SENSING_ADAPTED_MODEL
+        ):
+            raise ValueError("adapted models must use REMOTE_SENSING_ADAPTED_MODEL")
+        if self.model_kind is VisionModelKind.REMOTE_SENSING_ADAPTED_MODEL and (
+            not self.remote_sensing_adapted or self.adapter_path is None
+        ):
+            raise ValueError("adapted model kind requires an adapter and adapted flag")
+        if not self.raster_bands or any(band < 1 for band in self.raster_bands):
+            raise ValueError("raster_bands must contain positive 1-based indexes")
 
 
 @dataclass(frozen=True)
@@ -117,6 +140,9 @@ class VisionProvenance:
     remote_sensing_adapted: bool
     adaptation_name: str | None = None
     model_revision: str | None = None
+    adaptation_dataset: str | None = None
+    adaptation_method: str | None = None
+    model_kind: VisionModelKind = VisionModelKind.GENERIC_MODEL
 
     def as_dict(self) -> dict[str, str | bool | None]:
         return {
@@ -125,6 +151,9 @@ class VisionProvenance:
             "remote_sensing_adapted": self.remote_sensing_adapted,
             "adaptation_name": self.adaptation_name,
             "model_revision": self.model_revision,
+            "adaptation_dataset": self.adaptation_dataset,
+            "adaptation_method": self.adaptation_method,
+            "model_kind": self.model_kind.value,
         }
 
 
@@ -140,6 +169,8 @@ class VisionResult:
     error_code: str | None = None
     analysis_id: UUID | None = None
     step_id: str = "vision"
+    query: str | None = None
+    image_dimensions: tuple[int, int] | None = None
 
     def __post_init__(self) -> None:
         if self.status is VisionStatus.COMPLETED and not self.answer:
@@ -163,6 +194,8 @@ class VisionResult:
             "error_code": self.error_code,
             "analysis_id": None if self.analysis_id is None else str(self.analysis_id),
             "step_id": self.step_id,
+            "query": self.query,
+            "image_dimensions": self.image_dimensions,
         }
 
     def to_specialist_result(self) -> SpecialistResult | None:
@@ -180,7 +213,8 @@ class VisionResult:
             specialist=Specialist.VISION,
             status=status,
             answer=self.answer,
-            limitations=list(self.limitations),
+                limitations=list(self.limitations),
+                evidence_regions=[region.as_dict() for region in self.evidence],
             provenance={
                 key: str(value)
                 for key, value in self.provenance.as_dict().items()
@@ -249,6 +283,27 @@ class HuggingFaceVisionProvider:
                 local_files_only=not self.config.allow_download,
                 trust_remote_code=self.config.trust_remote_code,
             )
+            if self.config.adapter_path is not None:
+                from peft import PeftModel  # type: ignore[import-not-found]
+
+                adapter_path = Path(self.config.adapter_path)
+                if not self.config.allow_download and not adapter_path.is_dir():
+                    raise FileNotFoundError(f"local adapter is unavailable: {adapter_path}")
+                provenance_path = adapter_path / "provenance.json"
+                if not provenance_path.is_file():
+                    raise ValueError("adapter provenance.json is missing")
+                import json
+
+                provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+                if not provenance.get("remote_sensing_adapted"):
+                    raise ValueError(
+                        "adapter provenance does not declare remote-sensing adaptation"
+                    )
+                if not provenance.get("dataset") or not provenance.get("adaptation_method"):
+                    raise ValueError(
+                        "adapter provenance must include dataset and adaptation_method"
+                    )
+                self._model = PeftModel.from_pretrained(self._model, str(self.config.adapter_path))
             self._model.to(self.config.device)
             self._model.eval()
         except Exception:
@@ -279,9 +334,12 @@ class HuggingFaceVisionProvider:
             )
 
         try:
-            with Image.open(request.image_path) as image:
+            image, image_dimensions, preprocessing_limitations = _load_input_image(
+                request.image_path, self.config, Image
+            )
+            with image:
                 inputs = self._processor(
-                    images=image.convert("RGB"),
+                    images=image,
                     text=_prompt_for(request),
                     return_tensors="pt",
                 )
@@ -294,35 +352,133 @@ class HuggingFaceVisionProvider:
             answer = self._processor.batch_decode(generated, skip_special_tokens=True)[0].strip()
             if not answer:
                 return _failed_result(request, self.config, "model_empty_response")
-            limitations = ["Confidence was not provided by the configured model."]
+            limitations = [
+                "Confidence was not provided by the configured model; "
+                "any confidence is uncalibrated."
+            ]
+            limitations.extend(preprocessing_limitations)
             if not self.config.remote_sensing_adapted:
                 limitations.append(
                     "The configured model is not marked as remote-sensing adapted."
                 )
+            regions: tuple[VisionRegion, ...] = ()
             if request.task is VisionTask.GROUNDING:
-                limitations.append(
-                    "No grounding regions were returned; free-form text is not converted "
-                    "into evidence."
-                )
+                extracted = list(_extract_grounding_regions(answer))
+                if not extracted:
+                    return _unavailable_result(
+                        request,
+                        model_identifier=self.config.model_identifier,
+                        reason=(
+                            "The configured model cannot perform grounding "
+                            "(no valid bounding boxes returned)."
+                        ),
+                        error_code="capability_unsupported",
+                        config=self.config,
+                    )
+                regions = tuple(extracted)
+                limitations.append("Grounding bounding boxes were extracted from raw text output.")
+
             return VisionResult(
                 task=request.task,
                 status=VisionStatus.COMPLETED,
                 answer=answer,
                 confidence=None,
-                evidence=(),
+                evidence=regions,
                 provenance=_provenance(self.config),
                 limitations=tuple(limitations),
                 analysis_id=request.analysis_id,
                 step_id=request.step_id,
+                query=request.prompt,
+                image_dimensions=image_dimensions,
             )
         except Exception as error:
             return _failed_result(request, self.config, "inference_failed", str(error))
+
+    def run_vqa(self, request: VisionRequest) -> VisionResult:
+        if request.task is not VisionTask.VQA:
+            raise ValueError("run_vqa requires a VQA request")
+        return self.run(request)
+
+    def run_caption(self, request: VisionRequest) -> VisionResult:
+        if request.task is not VisionTask.CAPTIONING:
+            raise ValueError("run_caption requires a captioning request")
+        return self.run(request)
+
+    def run_grounding(self, request: VisionRequest) -> VisionResult:
+        if request.task is not VisionTask.GROUNDING:
+            raise ValueError("run_grounding requires a grounding request")
+        return self.run(request)
 
 
 def _prompt_for(request: VisionRequest) -> str:
     if request.prompt:
         return request.prompt
     return "Describe the visible content of this image factually."
+
+
+def _extract_grounding_regions(text: str) -> Iterator[VisionRegion]:
+    import re
+    pattern = re.compile(
+        r"(?:([A-Za-z0-9_-]+)\s*)?(?:\[|<box>|<loc_)\s*(0\.\d+)\s*,\s*(0\.\d+)\s*,\s*(0\.\d+)\s*,\s*(0\.\d+)\s*(?:\]|</box>|>|loc_>)"
+    )
+    for match in pattern.finditer(text):
+        label = (match.group(1) or "object").strip()
+        if not label:
+            label = "object"
+        try:
+            x_min, y_min, x_max, y_max = (
+                float(match.group(2)),
+                float(match.group(3)),
+                float(match.group(4)),
+                float(match.group(5)),
+            )
+            if x_min < x_max and y_min < y_max:
+                yield VisionRegion(
+                    label=label[:50], x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max
+                )
+        except ValueError:
+            pass
+
+
+def _load_input_image(
+    path: Path, config: VisionModelConfig, image_module: Any
+) -> tuple[Any, tuple[int, int], tuple[str, ...]]:
+    """Load ordinary images or explicitly selected GeoTIFF bands for RGB models."""
+    if path.suffix.lower() not in {".tif", ".tiff"}:
+        image = image_module.open(path).convert("RGB")
+        return image, image.size, ()
+    try:
+        import numpy as np
+        import rasterio  # type: ignore[import-untyped]
+    except ImportError as error:
+        raise RuntimeError("rasterio and numpy are required for GeoTIFF inference") from error
+    with rasterio.open(path) as dataset:
+        if max(config.raster_bands) > dataset.count:
+            raise ValueError(
+                f"selected raster bands {config.raster_bands} exceed GeoTIFF "
+                f"band count {dataset.count}"
+            )
+        data = dataset.read(list(config.raster_bands)).astype("float32")
+    finite = np.isfinite(data)
+    if not finite.any():
+        raise ValueError("selected GeoTIFF bands contain no finite pixels")
+    output = np.zeros_like(data, dtype=np.uint8)
+    for index, band in enumerate(data):
+        valid = finite[index]
+        minimum, maximum = float(band[valid].min()), float(band[valid].max())
+        if maximum > minimum:
+            output[index] = np.clip((band - minimum) * 255 / (maximum - minimum), 0, 255)
+    image = image_module.fromarray(np.moveaxis(output, 0, -1), mode="RGB")
+    return (
+        image,
+        (image.width, image.height),
+        (
+            "GeoTIFF converted to RGB for the configured vision model.",
+            f"Selected 1-based bands: {config.raster_bands}.",
+            "Per-band min/max uint8 scaling was applied; original raster values "
+            "were not passed to the model.",
+        ),
+    )
 
 
 def _provenance(config: VisionModelConfig, provider: str = "huggingface") -> VisionProvenance:
@@ -332,6 +488,9 @@ def _provenance(config: VisionModelConfig, provider: str = "huggingface") -> Vis
         remote_sensing_adapted=config.remote_sensing_adapted,
         adaptation_name=config.adaptation_name,
         model_revision=config.revision,
+        adaptation_dataset=config.adaptation_dataset,
+        adaptation_method=config.adaptation_method,
+        model_kind=config.model_kind,
     )
 
 

@@ -1,68 +1,64 @@
-# Person 2: Satellite preprocessing
+# Person 2: Satellite ingestion and preprocessing
 
-This package performs local, credential-free preprocessing of existing GeoTIFF/TIFF files.
-It does not download imagery, call Google Earth Engine, or infer a sensor when the file metadata
-does not establish one. Install the optional geospatial dependencies first:
+Person 2 is the satellite data subsystem for local GeoTIFF/TIFF inspection, Earth Engine acquisition, metadata, CRS-aware preprocessing, pairing, alignment, and deterministic GeoTIFF tiling. P4 owns optical/SAR analysis and fusion; this package only prepares and reports compatible inputs.
 
-```powershell
-pip install -e ".\[geo,dev\]"
-```
+## Public pipeline
 
-## Inspect and load an image
+The high-level interface is:
 
 ```python
-from person2.preprocessing import inspect_raster, load_image
+from app.models import SatellitePipelineRequest
+from app.pipeline import process_satellite_request
 
-inspection = inspect_raster("data/example.tif")
-print(inspection.as_dict())
-
-image = load_image("data/example.tif")
-print(image.data.shape)  # (bands, height, width)
-```
-
-Inspection returns width, height, band count, dtype, CRS, affine transform, bounds, resolution,
-nodata, and deterministically ordered file metadata. A missing CRS remains `None`.
-
-## Normalize and tile for a model
-
-```python
-from person2.preprocessing import SingleImageInput, prepare
-
-prepared = prepare(
-	SingleImageInput("data/example.tif"),
-	tile_size=(256, 256),
-	overlap=32,
+result = process_satellite_request(
+    SatellitePipelineRequest(
+        workflow="single-sentinel-2",
+        aoi={"bbox": [73.80, 18.50, 73.81, 18.51]},
+        start_date="2026-01-01",
+        bands=["B04", "B03", "B02", "B08"],
+        target_crs="EPSG:32643",
+        source_path="data/local_scene.tif",
+        tile=True,
+    )
 )
-for tile in prepared.tiles["image"]:
-	model_input = tile.data  # float32, channels-first, values in [0, 1]
-	print(tile.window, model_input.shape)
 ```
 
-Normalization is per band, ignores non-finite values and nodata, maps constant valid bands to zero,
-and never fabricates missing values. `normalize_image` is also available directly when an array is
-already loaded.
+`PipelineResult` reports status, processed/aligned paths, metadata paths, tile paths, processing information, warnings, and errors. The complete input and output contract is documented in [integration_contract.md](integration_contract.md).
 
-## Before/after and optical/SAR pairs
+Supported workflows:
 
-```python
-from person2.preprocessing import BeforeAfterInput, OpticalSarInput, prepare
+- single Sentinel-1 or Sentinel-2;
+- before/after Sentinel-1 or Sentinel-2 with common-grid alignment;
+- optical/SAR pairing with acquisition-date and AOI-coverage checks; and
+- explicit failure for the reserved before/after optical/SAR workflow.
 
-change_input = prepare(BeforeAfterInput("data/before.tif", "data/after.tif"))
-fusion_input = prepare(OpticalSarInput("data/optical.tif", "data/sar.tif"), tile_size=512)
-print(change_input.kind)  # before_after
-print(fusion_input.kind)  # optical_sar
-```
+## Capabilities
 
-Paired rasters must have matching width, height, CRS, transform, bounds, and resolution. A
-`SpatialCompatibilityError` names every mismatched field. Pairing does not identify whether a file is
-Sentinel-1, Sentinel-2, optical, or SAR; that classification must come from trusted upstream metadata.
+The `app/` subsystem contains Earth Engine Sentinel-1/Sentinel-2 search and download adapters, AOI validation and CRS conversion, metadata extraction, Sentinel-specific preprocessing, reprojection, clipping, resampling, nodata handling, before/after and optical/SAR pairing, alignment, and GeoTIFF tiling.
 
-## Tests
+Local source paths are supported for offline workflows. The app pipeline reuses the preserved `person2.preprocessing.service.validate_raster` boundary before delegating to the richer sensor-specific processors, so local file inspection does not create a second validation contract.
 
-From the repository root, run the focused suite:
+Earth Engine access is explicit. If `earthengine-api` is absent, authentication is missing, `GOOGLE_PROJECT_ID` is unset, or no matching scene exists, the acquisition layer raises a truthful typed acquisition error and the high-level pipeline returns `status="failed"`; it never fabricates imagery or metadata.
+
+Install the teammate subsystem requirements with:
 
 ```powershell
-python -m pytest person2/tests -q
-python -m ruff check person2
-python -m mypy person2
+pip install -r person2/requirements.txt
 ```
+
+Configure non-secret settings through environment variables such as `GOOGLE_PROJECT_ID`, `DATA_ROOT`, and `LOG_LEVEL`. Keep credentials outside the repository; `.env.example` documents names only.
+
+## Preserved service boundary
+
+`person2/preprocessing/service.py` remains the lightweight credential-free API for `inspect_raster`, `load_image`, `prepare`, normalization, and in-memory tiling. The app pipeline reuses its local validation function while the app modules provide CRS-aware output files and acquisition provenance.
+
+## Tests and checks
+
+From the repository root:
+
+```powershell
+python -m pytest person2
+python -m ruff check person2/app/pipeline/pipeline.py person2/tests/conftest.py
+```
+
+The full Person 2 suite covers local inspection, preprocessing, CRS safety, Sentinel-1/Sentinel-2 acquisition with injected Earth Engine doubles, metadata, pairing, alignment, tiling, pipeline outputs, and failure paths. The test conftest only exposes the target `person2/app` package under its teammate contractual import name `app`; it does not alter production behavior.

@@ -12,7 +12,7 @@ from .orchestrator import (
 	SpecialistProvider,
 	VisionProvider,
 )
-from .planner import PlanningError, TaskPlanner
+from .planner import PlanningError, QueryInterpretation, QueryInterpreter, TaskPlanner
 
 __all__ = [
 	"ChangeDetectionProvider",
@@ -23,6 +23,8 @@ __all__ = [
 	"OrchestrationStatus",
 	"Orchestrator",
 	"PlanningError",
+	"QueryInterpretation",
+	"QueryInterpreter",
 	"PreprocessingProvider",
 	"ProviderRegistry",
 	"SpecialistInvocation",

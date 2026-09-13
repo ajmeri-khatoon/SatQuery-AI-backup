@@ -100,22 +100,32 @@ def _unavailable_result(
     analysis_id: UUID, step_id: str, specialist: Specialist
 ) -> SpecialistResult:
     if specialist is Specialist.VISION:
-        return UnavailableVisionProvider().run(
-            VisionRequest(
-                image_reference="unavailable.tif", task=VisionTask.VQA,
-                prompt="No provider configured.", analysis_id=analysis_id, step_id=step_id,
+        return (
+            UnavailableVisionProvider()
+            .run(
+                VisionRequest(
+                    image_reference="unavailable.tif",
+                    task=VisionTask.VQA,
+                    prompt="No provider configured.",
+                    analysis_id=analysis_id,
+                    step_id=step_id,
+                )
             )
-        ).to_specialist_result()  # type: ignore[return-value]
+            .to_specialist_result()
+        )  # type: ignore[return-value]
     if specialist is Specialist.CHANGE_DETECTION:
         return UnavailableChangeProvider().run(analysis_id, step_id)
     if specialist is Specialist.OPTICAL_SAR:
         return UnavailableOpticalSarProvider().run(analysis_id, step_id)
     if specialist is Specialist.FUSION:
         return SpecialistResult(
-            analysis_id=analysis_id, step_id=step_id, specialist=specialist,
+            analysis_id=analysis_id,
+            step_id=step_id,
+            specialist=specialist,
             status=SpecialistStatus.UNAVAILABLE,
             limitations=["Optical/SAR fusion provider is not configured."],
-            provenance={"provider": "unconfigured"}, error_code="provider_unavailable",
+            provenance={"provider": "unconfigured"},
+            error_code="provider_unavailable",
         )
     return SpecialistResult(
         analysis_id=analysis_id,

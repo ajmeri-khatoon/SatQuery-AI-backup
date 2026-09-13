@@ -1,0 +1,15 @@
+# Satellite data and geospatial processing
+earthengine-api
+geopandas
+numpy
+pandas
+pydantic>=2.7,<3
+pyproj
+rasterio
+shapely
+
+# Optional Sentinel Hub data source
+sentinelhub
+
+# Test runner
+pytest

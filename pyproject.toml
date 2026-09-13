@@ -29,6 +29,9 @@ ml = [
   "torch>=2.2,<3",
   "transformers>=4.40,<5",
 ]
+adaptation = [
+  "peft>=0.13,<1",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "person1/tests", "person2/tests", "person3/tests", "person4/tests", "person5/tests"]

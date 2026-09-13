@@ -230,6 +230,7 @@ class SpecialistResult(ContractModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
     confidence_method: str | None = Field(default=None, max_length=200)
     evidence_ids: list[UUID] = Field(default_factory=list)
+    evidence_regions: list[dict[str, Any]] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     provenance: dict[str, str] = Field(default_factory=dict)
     error_code: str | None = Field(default=None, pattern=r"^[a-z0-9_]+$")

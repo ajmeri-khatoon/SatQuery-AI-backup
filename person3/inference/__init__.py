@@ -1,7 +1,17 @@
+from .adaptation import (
+	DatasetSplit,
+	LoRAAdaptationConfig,
+	RemoteSensingExample,
+	RemoteSensingJsonlDataset,
+	evaluate_lora,
+	split_dataset,
+	train_lora,
+)
 from .provider import (
 	HuggingFaceVisionProvider,
 	UnavailableVisionProvider,
 	VisionModelConfig,
+	VisionModelKind,
 	VisionProvenance,
 	VisionProvider,
 	VisionRegion,
@@ -15,6 +25,7 @@ __all__ = [
 	"HuggingFaceVisionProvider",
 	"UnavailableVisionProvider",
 	"VisionModelConfig",
+	"VisionModelKind",
 	"VisionProvenance",
 	"VisionProvider",
 	"VisionRegion",
@@ -22,4 +33,11 @@ __all__ = [
 	"VisionResult",
 	"VisionStatus",
 	"VisionTask",
+	"LoRAAdaptationConfig",
+	"DatasetSplit",
+	"RemoteSensingExample",
+	"RemoteSensingJsonlDataset",
+	"train_lora",
+	"split_dataset",
+	"evaluate_lora",
 ]

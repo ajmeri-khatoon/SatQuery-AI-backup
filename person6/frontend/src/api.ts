@@ -40,4 +40,10 @@ export const analysisApi = {
   run: (id: number) => request<AnalysisCreateResponse>(`/analyze/${id}/run`, { method: "POST" }),
   result: (id: number) => request<AnalysisResult>(`/result/${id}`),
   execution: (id: number) => request<ExecutionRecord[]>(`/execution/${id}`),
+  getMask: async (id: number) => {
+    const response = await fetch(`${API_BASE_URL}/result/${id}/mask`, { headers: authHeaders() });
+    if (!response.ok) throw new ApiError(response.status, "Failed to fetch mask");
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  }
 };

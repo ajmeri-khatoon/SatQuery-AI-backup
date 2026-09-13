@@ -31,7 +31,10 @@ describe("P5 API boundary", () => {
     await analysisApi.run(42);
     await analysisApi.result(42);
     await analysisApi.execution(42);
-    const paths = fetchMock.mock.calls.map(([path]) => String(path));
+    const paths = fetchMock.mock.calls.map(([path]) => {
+      try { return new URL(String(path)).pathname; }
+      catch { return String(path); }
+    });
     expect(paths).toEqual(["/upload", "/query", "/analyze/42/run", "/result/42", "/execution/42"]);
     expect((fetchMock.mock.calls[1][1]?.headers as Record<string, string>).Authorization).toBe("Bearer session-token");
   });
