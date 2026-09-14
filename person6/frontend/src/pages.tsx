@@ -13,7 +13,18 @@ const modeLabels: Record<AnalysisMode, string> = { single: "Single image", chang
 const slotForMode: Record<AnalysisMode, AssetSlot[]> = { single: ["single"], change: ["before", "after"], "optical-sar": ["optical", "sar"] };
 const capabilityForMode: Record<AnalysisMode, RequestedCapability> = { single: "auto", change: "change_detection", "optical-sar": "optical_sar_fusion" };
 
-function errorMessage(error: unknown): string { if (error instanceof ApiError) { if (error.status === 401) return "Your session has expired. Sign in again."; if (error.status === 404) return "The requested record was not found."; if (error.status === 409) return "This analysis has already been started."; if (error.status === 422) return error.message; if (error.status >= 500) return "The analysis service failed. Try again later."; return error.message; } return "The backend is unavailable. Check VITE_API_BASE_URL and try again."; }
+function errorMessage(error: unknown): string { 
+  if (error instanceof ApiError || (error as Error)?.name === "ApiError") { 
+    const apiError = error as ApiError;
+    if (apiError.status === 401) return apiError.message || "Your session has expired. Sign in again."; 
+    if (apiError.status === 404) return "The requested record was not found."; 
+    if (apiError.status === 409) return "This analysis has already been started."; 
+    if (apiError.status === 422) return apiError.message; 
+    if (apiError.status >= 500) return "The analysis service failed. Try again later."; 
+    return apiError.message; 
+  } 
+  return "The backend is unavailable. Check VITE_API_BASE_URL and try again."; 
+}
 function useSessionAssets() { const [assets, setAssets] = useState<UploadedAsset[]>(() => { try { return JSON.parse(sessionStorage.getItem("satquery.uploads") ?? "[]") as UploadedAsset[]; } catch { return []; } }); const update = (next: UploadedAsset[]) => { setAssets(next); sessionStorage.setItem("satquery.uploads", JSON.stringify(next)); }; return [assets, update] as const; }
 function toUploadedAsset(image: UploadedImage, slot: AssetSlot, file: File, status: UploadedAsset["status"] = "ready"): UploadedAsset { return { ...image, slot, status, size: file.size, format: file.name.split(".").pop()?.toUpperCase() ?? "FILE", previewUrl: URL.createObjectURL(file) }; }
 
