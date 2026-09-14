@@ -81,10 +81,14 @@ def test_single_image_flow_persists_unavailable_vision_and_trace(tmp_path: Path)
     assert result.status_code == 200
     body = result.json()
     assert body["final_result"]["status"] == "partial"
-    assert any(
-        item["specialist"] == "vision" and item["status"] == "unavailable"
-        for item in body["final_result"]["specialist_results"]
+    vision_result = next(
+        item for item in body["final_result"]["specialist_results"]
+        if item["specialist"] == "vision"
     )
+    assert vision_result["status"] == "unavailable"
+    # Ensure it doesn't say "No vision model is configured." when a model is configured but unavailable to download
+    limitations_str = " ".join(vision_result["limitations"])
+    assert "No vision model is configured" not in limitations_str
     assert body["trace"]["events"]
 
 

@@ -102,12 +102,19 @@ class PreprocessingAdapter:
 class VisionAdapter:
     def __init__(self, storage_root: Path):
         self.storage_root = storage_root
-        model_id = os.getenv("SATQUERY_VISION_MODEL")
-        self.provider = UnavailableVisionProvider() if not model_id else None
-        if model_id:
+        model_id = os.getenv("SATQUERY_VISION_MODEL", "HuggingFaceTB/SmolVLM-256M-Instruct")
+        if not model_id:
+            self.provider = UnavailableVisionProvider()
+        else:
             from person3.inference import HuggingFaceVisionProvider, VisionModelConfig
 
-            self.provider = HuggingFaceVisionProvider(VisionModelConfig(model_identifier=model_id))
+            allow_dl = os.getenv("SATQUERY_VISION_ALLOW_DOWNLOAD", "false").lower() == "true"
+            self.provider = HuggingFaceVisionProvider(
+                VisionModelConfig(
+                    model_identifier=model_id,
+                    allow_download=allow_dl
+                )
+            )
 
     def run(self, invocation: SpecialistInvocation) -> SpecialistResult:
         asset = invocation.assets[0]
