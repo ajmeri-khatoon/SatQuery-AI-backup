@@ -116,7 +116,12 @@ def execute_analysis(analysis: Analysis, db: Session, storage_root: str | Path) 
     analysis.status = "running"
     db.commit()
     factory = IntegrationProviderFactory(storage_root)
-    orchestrator = Orchestrator(providers=factory.registry())
+    orchestrator = Orchestrator(
+        providers=factory.registry(),
+        asset_resolver=lambda asset: str(
+            (storage_root / asset.storage_key).resolve()
+        ),
+    )
     result = orchestrator.run(request, assets)
     analysis.status = result.status.value
     analysis.plan_data = None if result.plan is None else result.plan.model_dump(mode="json")
