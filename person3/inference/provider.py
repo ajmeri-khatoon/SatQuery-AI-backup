@@ -324,7 +324,7 @@ class HuggingFaceVisionProvider:
             self._load_model()
             import torch  # type: ignore[import-not-found]
             from PIL import Image  # type: ignore[import-not-found]
-        except (ImportError, OSError, RuntimeError, ValueError) as error:
+        except (ImportError, OSError, RuntimeError, ValueError, AttributeError) as error:
             return _unavailable_result(
                 request,
                 model_identifier=self.config.model_identifier,
