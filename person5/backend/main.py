@@ -6,18 +6,16 @@ from .auth import router as auth_router
 from .upload import router as upload_router
 
 
+import os
+
 def create_app() -> FastAPI:
     app = FastAPI(title="SatQuery API", version="0.2.0")
 
+    cors_origins = os.getenv("SATQUERY_CORS_ORIGINS", "*").split(",")
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://localhost:5174",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:5174",
-            "https://satquery-ai-fronend.onrender.com",
-        ],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
