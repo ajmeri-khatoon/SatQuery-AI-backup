@@ -91,6 +91,25 @@ def test_vqa_routes_to_preprocessing_and_vision() -> None:
     assert [item.step_id for item in result.specialist_results] == ["preprocess", "vision"]
 
 
+def test_png_vqa_bypasses_raster_preprocessing() -> None:
+    image = ImageAsset(
+        original_filename="scene.png",
+        storage_key="scene.png",
+        content_type="image/png",
+        format=AssetFormat.PNG,
+        role=ImageRole.SINGLE,
+    )
+    vision = MockProvider("vision answer", 0.8)
+    preprocessing = MockProvider("must not run")
+    result = Orchestrator(
+        providers=ProviderRegistry(preprocessing=preprocessing, vision=vision)
+    ).run(request("What is visible?", [image]), [image])
+
+    assert result.status is OrchestrationStatus.COMPLETED
+    assert [item.step_id for item in result.specialist_results] == ["vision"]
+    assert preprocessing.calls == []
+
+
 def test_captioning_routes_from_auto_question() -> None:
     image = asset(ImageRole.SINGLE)
     result = Orchestrator(providers=providers()).run(

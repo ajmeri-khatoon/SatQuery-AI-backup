@@ -12,7 +12,7 @@ from ..schemas.analysis import (
 )
 from ..services.analysis_execution import create_contract_analysis, execute_analysis
 from .auth import get_current_user
-from .config import PROJECT_ROOT
+from .config import STORAGE_ROOT
 from .database import get_db
 
 router = APIRouter(tags=["analysis"])
@@ -50,7 +50,7 @@ def _create_analysis(
     db.add(analysis)
     db.flush()
     try:
-        create_contract_analysis(analysis, images, question, requested_capability, db, PROJECT_ROOT)
+        create_contract_analysis(analysis, images, question, requested_capability, db, STORAGE_ROOT)
     except ValueError as error:
         db.rollback()
         raise HTTPException(
@@ -135,7 +135,7 @@ def get_result_mask(
     from fastapi.responses import FileResponse
     analysis = _get_user_analysis(analysis_id, current_user.id, db)
     mask_filename = f"{analysis.request_data['request']['id']}_change_mask.png"
-    mask_path = PROJECT_ROOT / mask_filename
+    mask_path = STORAGE_ROOT / mask_filename
     if not mask_path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mask not found or not generated for this analysis")
     return FileResponse(mask_path, media_type="image/png")
@@ -154,7 +154,7 @@ def run_analysis(
             detail=f"Analysis is already {analysis.status}",
         )
     try:
-        analysis = execute_analysis(analysis, db, PROJECT_ROOT)
+        analysis = execute_analysis(analysis, db, STORAGE_ROOT)
     except ValueError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)

@@ -39,6 +39,8 @@ class SensorType(StrEnum):
 class AssetFormat(StrEnum):
     GEOTIFF = "geotiff"
     TIFF = "tiff"
+    PNG = "png"
+    JPEG = "jpeg"
 
 
 class AssetStatus(StrEnum):
@@ -143,7 +145,7 @@ class ImageAsset(ContractModel):
     id: UUID = Field(default_factory=uuid4)
     original_filename: str = Field(min_length=1, max_length=255)
     storage_key: str = Field(min_length=1, max_length=512)
-    content_type: str = Field(pattern=r"^image/(tiff|geotiff)$")
+    content_type: str = Field(pattern=r"^image/(tiff|geotiff|png|jpeg)$")
     format: AssetFormat
     role: ImageRole
     sensor: SensorType = SensorType.UNKNOWN

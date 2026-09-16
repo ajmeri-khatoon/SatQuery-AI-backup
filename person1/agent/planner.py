@@ -157,13 +157,14 @@ class TaskPlanner:
 
         interpretation = self.interpret(request)
         task = self._select_task(request, assets, interpretation)
-        specialists = self._specialists(task, interpretation)
+        ordinary_image = any(asset.format.value in {"png", "jpeg"} for asset in assets)
+        specialists = self._specialists(task, interpretation, ordinary_image)
         return TaskPlan(
             analysis_id=request.id,
             contract_version=CONTRACT_VERSION,
             task=task,
             specialists=specialists,
-            steps=self._steps(task, request.asset_ids, interpretation),
+            steps=self._steps(task, request.asset_ids, interpretation, ordinary_image),
             validation="valid",
             limitations=[],
         )
@@ -246,8 +247,12 @@ class TaskPlanner:
 
     @staticmethod
     def _specialists(
-        task: TaskType, interpretation: QueryInterpretation | None = None
+        task: TaskType,
+        interpretation: QueryInterpretation | None = None,
+        ordinary_image: bool = False,
     ) -> list[Specialist]:
+        if ordinary_image and task in {TaskType.VQA, TaskType.CAPTION, TaskType.GROUNDING}:
+            return [Specialist.VISION]
         if interpretation is not None and interpretation.metadata_query:
             return [Specialist.PREPROCESSING]
         if task is TaskType.CHANGE_DETECTION:
@@ -264,7 +269,17 @@ class TaskPlanner:
         task: TaskType,
         asset_ids: list[UUID],
         interpretation: QueryInterpretation | None = None,
+        ordinary_image: bool = False,
     ) -> list[PlanStep]:
+        if ordinary_image and task in {TaskType.VQA, TaskType.CAPTION, TaskType.GROUNDING}:
+            return [
+                PlanStep(
+                    id="vision",
+                    specialist=Specialist.VISION,
+                    operation=task.value,
+                    input_asset_ids=asset_ids,
+                )
+            ]
         steps = [
             PlanStep(
                 id="preprocess",

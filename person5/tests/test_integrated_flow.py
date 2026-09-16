@@ -33,12 +33,18 @@ def _write_raster(path: Path, bands: int = 3, value: float = 1.0) -> None:
         dataset.write(data)
 
 
+def _write_png(path: Path) -> None:
+    from PIL import Image as PillowImage
+
+    PillowImage.new("RGB", (8, 8), color=(20, 40, 60)).save(path)
+
+
 def _client(tmp_path: Path) -> TestClient:
     database.Base.metadata.drop_all(database.engine)
     database.Base.metadata.create_all(database.engine)
     upload.UPLOAD_DIRECTORY = tmp_path / "uploads"
-    upload.PROJECT_ROOT = tmp_path
-    analysis_routes.PROJECT_ROOT = tmp_path
+    upload.STORAGE_ROOT = tmp_path
+    analysis_routes.STORAGE_ROOT = tmp_path
     return TestClient(create_app())
 
 
@@ -90,6 +96,45 @@ def test_single_image_flow_persists_unavailable_vision_and_trace(tmp_path: Path)
     limitations_str = " ".join(vision_result["limitations"])
     assert "No vision model is configured" not in limitations_str
     assert body["trace"]["events"]
+
+
+def test_png_vqa_is_routed_to_vision_without_raster_preprocessing(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    token = _token(client, f"png-{uuid4()}@example.com")
+    source = tmp_path / "single.png"
+    _write_png(source)
+    image_id = _upload(client, token, source)
+
+    created = client.post(
+        "/query",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"image_id": image_id, "question": "What is visible?"},
+    )
+    assert created.status_code == 201
+    assert [step["id"] for step in created.json()["plan"]["steps"]] == ["vision"]
+
+
+def test_missing_uploaded_asset_reports_durable_storage_requirement(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    token = _token(client, f"missing-{uuid4()}@example.com")
+    source = tmp_path / "single.tif"
+    _write_raster(source)
+    image_id = _upload(client, token, source)
+    created = client.post(
+        "/query",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"image_id": image_id, "question": "What is visible?"},
+    )
+    assert created.status_code == 201
+    stored = next(upload.UPLOAD_DIRECTORY.glob("*.tif"))
+    stored.unlink()
+
+    analysis_id = created.json()["analysis_id"]
+    assert client.post(f"/analyze/{analysis_id}/run", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    body = client.get(f"/result/{analysis_id}", headers={"Authorization": f"Bearer {token}"}).json()
+    assert body["final_result"]["status"] == "rejected"
+    assert any("SATQUERY_STORAGE_ROOT" in item for item in body["final_result"]["limitations"])
+    assert any(event["step_id"] == "asset_storage" for event in body["trace"]["events"])
 
 
 def test_change_detection_uses_person4_fallback(tmp_path: Path) -> None:

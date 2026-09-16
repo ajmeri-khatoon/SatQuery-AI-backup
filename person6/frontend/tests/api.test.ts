@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { analysisApi, authApi, setToken } from "../src/api";
+import { analysisApi, ApiNetworkError, authApi, fetchHealth, setToken } from "../src/api";
 
 const storage = new Map<string, string>();
 const response = (body: unknown, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
@@ -42,5 +42,17 @@ describe("P5 API boundary", () => {
   it("surfaces backend error status and detail", async () => {
     vi.mocked(fetch).mockResolvedValue(response({ detail: "Analysis is already running" }, 409) as Response);
     await expect(analysisApi.run(42)).rejects.toMatchObject({ status: 409, message: "Analysis is already running" });
+  });
+
+  it("retries a transient backend wake-up response for safe GET requests", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(response({}, 503) as Response).mockResolvedValueOnce(response({ status: "ok", stage: "integrated", providers: "configured" }) as Response);
+    await expect(fetchHealth()).resolves.toMatchObject({ status: "ok" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("distinguishes an unreachable backend from an HTTP response", async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError("network failed"));
+    await expect(authApi.login("analyst@example.com", "password123")).rejects.toBeInstanceOf(ApiNetworkError);
   });
 });

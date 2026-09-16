@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
+STORAGE_ROOT = Path(os.getenv("SATQUERY_STORAGE_ROOT", str(PROJECT_ROOT))).resolve()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")

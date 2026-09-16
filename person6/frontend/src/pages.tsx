@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowRight, CheckCircle2, Database, FileText, GitCompare, Layers3, LockKeyhole, LogOut, Radar, Search, UploadCloud, User, Monitor, Clock, Settings, Info } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
-import { analysisApi, ApiError, fetchHealth } from "./api";
+import { analysisApi, ApiError, ApiNetworkError, fetchHealth } from "./api";
 import { useAuth } from "./auth";
 import { useTheme } from "./theme";
 import type { AnalysisMode, AnalysisResult, AssetSlot, ExecutionRecord, RequestedCapability, SpecialistResult, TaskPlan, UploadedAsset, UploadedImage } from "./contracts";
@@ -14,13 +14,19 @@ const slotForMode: Record<AnalysisMode, AssetSlot[]> = { single: ["single"], cha
 const capabilityForMode: Record<AnalysisMode, RequestedCapability> = { single: "auto", change: "change_detection", "optical-sar": "optical_sar_fusion" };
 
 function errorMessage(error: unknown): string { 
+  if (error instanceof ApiNetworkError || (error as Error)?.name === "ApiNetworkError") {
+    return (error as ApiNetworkError).kind === "timeout"
+      ? "The backend is taking too long to respond and may be waking. Try again shortly."
+      : "The backend cannot be reached and may be waking. Check the connection and try again.";
+  }
   if (error instanceof ApiError || (error as Error)?.name === "ApiError") { 
     const apiError = error as ApiError;
     if (apiError.status === 401) return apiError.message || "Your session has expired. Sign in again."; 
+    if (apiError.status === 403) return apiError.message || "You do not have permission to perform this action.";
     if (apiError.status === 404) return "The requested record was not found."; 
     if (apiError.status === 409) return "This analysis has already been started."; 
     if (apiError.status === 422) return apiError.message; 
-    if (apiError.status >= 500) return "The analysis service failed. Try again later."; 
+    if (apiError.status >= 500) return `The backend returned HTTP ${apiError.status}. Try again later.`;
     return apiError.message; 
   } 
   return "The backend is unavailable. Check VITE_API_BASE_URL and try again."; 

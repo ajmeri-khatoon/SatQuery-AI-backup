@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -13,6 +14,7 @@ from shared.contracts import (
     ImageRole,
     RequestedCapability,
     SensorType,
+    TraceEvent,
 )
 
 from ..integration.adapters import IntegrationProviderFactory
@@ -57,15 +59,27 @@ def build_contract(
     assets: list[ImageAsset] = []
     for image, role in zip(images, roles):
         suffix = Path(image.filename).suffix.lower()
-        if suffix not in {".tif", ".tiff"}:
-            raise ValueError("analysis providers require GeoTIFF or TIFF inputs")
+        if suffix not in {".tif", ".tiff", ".png", ".jpg", ".jpeg"}:
+            raise ValueError("unsupported image format")
+        if capability in {
+            RequestedCapability.CHANGE_DETECTION,
+            RequestedCapability.OPTICAL_SAR_FUSION,
+        } and suffix not in {".tif", ".tiff"}:
+            raise ValueError("change and optical/SAR analysis require GeoTIFF or TIFF inputs")
+        asset_format, content_type = {
+            ".tif": (AssetFormat.GEOTIFF, "image/geotiff"),
+            ".tiff": (AssetFormat.TIFF, "image/tiff"),
+            ".png": (AssetFormat.PNG, "image/png"),
+            ".jpg": (AssetFormat.JPEG, "image/jpeg"),
+            ".jpeg": (AssetFormat.JPEG, "image/jpeg"),
+        }[suffix]
         assets.append(
             ImageAsset(
                 id=uuid4(),
                 original_filename=image.filename,
                 storage_key=image.file_path.replace("\\", "/"),
-                content_type="image/tiff",
-                format=AssetFormat.GEOTIFF if suffix == ".tif" else AssetFormat.TIFF,
+                content_type=content_type,
+                format=asset_format,
                 role=role,
                 sensor=SensorType.UNKNOWN,
             )
@@ -122,7 +136,39 @@ def execute_analysis(analysis: Analysis, db: Session, storage_root: str | Path) 
             (storage_root / asset.storage_key).resolve()
         ),
     )
+    missing_assets = [
+        asset.original_filename
+        for asset in assets
+        if not (Path(storage_root) / asset.storage_key).is_file()
+    ]
     result = orchestrator.run(request, assets)
+    if missing_assets:
+        limitation = (
+            "Uploaded asset storage is unavailable: "
+            + ", ".join(missing_assets)
+            + ". Configure SATQUERY_STORAGE_ROOT on durable storage; local web-service "
+            "files cannot be relied on after a restart."
+        )
+        trace = result.trace.model_copy(
+            update={
+                "events": [
+                    *result.trace.events,
+                    TraceEvent(
+                        step_id="asset_storage",
+                        event_type="unavailable",
+                        component="person5.storage",
+                        message=limitation,
+                        details={"error": "persistent_storage_required"},
+                    ),
+                ]
+            }
+        )
+        result = replace(
+            result,
+            limitations=(*result.limitations, limitation),
+            provenance={**result.provenance, "storage": "asset_missing"},
+            trace=trace,
+        )
     analysis.status = result.status.value
     analysis.plan_data = None if result.plan is None else result.plan.model_dump(mode="json")
     analysis.result_data = result.as_dict()

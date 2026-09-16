@@ -7,11 +7,11 @@ from sqlalchemy.orm import Session
 from ..models import Image, User
 from ..schemas.images import ImageResponse
 from .auth import get_current_user
-from .config import PROJECT_ROOT
+from .config import STORAGE_ROOT
 from .database import get_db
 
 router = APIRouter(tags=["images"])
-UPLOAD_DIRECTORY = PROJECT_ROOT / "uploads"
+UPLOAD_DIRECTORY = STORAGE_ROOT / "uploads"
 ALLOWED_EXTENSIONS = {".tif", ".tiff", ".png", ".jpg", ".jpeg"}
 
 
@@ -41,7 +41,7 @@ async def upload_image(
         image = Image(
             user_id=current_user.id,
             filename=original_filename,
-            file_path=str(stored_path.relative_to(PROJECT_ROOT)),
+            file_path=str(stored_path.relative_to(STORAGE_ROOT)),
         )
         db.add(image)
         db.commit()

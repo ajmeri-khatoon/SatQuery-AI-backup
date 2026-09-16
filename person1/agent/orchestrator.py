@@ -357,7 +357,7 @@ class Orchestrator:
         limitations: list[str] = []
         for asset in assets:
             suffix = Path(asset.original_filename).suffix.lower()
-            if suffix not in {".tif", ".tiff"}:
+            if suffix not in {".tif", ".tiff", ".jpg", ".jpeg", ".png"}:
                 raise OrchestrationError(f"unsupported image format for {asset.original_filename}")
             if asset.role is ImageRole.SAR and asset.sensor in {
                 SensorType.SENTINEL_2, SensorType.OTHER_OPTICAL

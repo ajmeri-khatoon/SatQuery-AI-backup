@@ -24,7 +24,7 @@ from .models import (
     TraceOutcome,
 )
 
-CONTRACT_VERSION = "0.1"
+CONTRACT_VERSION = "0.2"
 
 __all__ = [
     "AnalysisRequest",
