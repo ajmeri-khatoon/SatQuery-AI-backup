@@ -73,6 +73,13 @@ def build_contract(
             ".jpg": (AssetFormat.JPEG, "image/jpeg"),
             ".jpeg": (AssetFormat.JPEG, "image/jpeg"),
         }[suffix]
+        asset_format, content_type = {
+            ".tif": (AssetFormat.GEOTIFF, "image/geotiff"),
+            ".tiff": (AssetFormat.TIFF, "image/tiff"),
+            ".png": (AssetFormat.PNG, "image/png"),
+            ".jpg": (AssetFormat.JPEG, "image/jpeg"),
+            ".jpeg": (AssetFormat.JPEG, "image/jpeg"),
+        }[suffix]
         assets.append(
             ImageAsset(
                 id=uuid4(),
@@ -196,8 +203,8 @@ def execute_analysis(analysis: Analysis, db: Session, storage_root: str | Path) 
         if execution is not None:
             execution.status = specialist_result.status.value
             execution.result_data = specialist_result.model_dump(mode="json")
-        if specialist_result.limitations:
-            execution.error_message = "; ".join(specialist_result.limitations)[:2000]
+            if specialist_result.limitations:
+                execution.error_message = "; ".join(specialist_result.limitations)[:2000]
     for event in result.trace.events:
         execution = steps.get(event.step_id)
         if execution is not None and event.event_type == "started":

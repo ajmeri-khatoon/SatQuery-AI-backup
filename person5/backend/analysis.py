@@ -159,6 +159,10 @@ def run_analysis(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
         ) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"
+        ) from error
     return AnalysisCreateResponse(analysis_id=analysis.id, status=analysis.status)
 
 
